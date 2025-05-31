@@ -196,7 +196,7 @@ CREATE TABLE LA_SELECTION.Envio (
     Fecha_Programada DATETIME2(6),
     Fecha DATETIME2(6),
     ImporteTraslado DECIMAL(18,0),
-    ImporteSubTotal DECIMAL(18,0),
+    importeSubida DECIMAL(18,0),
     Total DECIMAL(18,0),
     Factura_id BIGINT,
     FOREIGN KEY (Factura_id) REFERENCES LA_SELECTION.Factura(Factura_id)
@@ -303,7 +303,27 @@ BEGIN
 	INNER JOIN LA_SELECTION.Provincia P
 	ON L.Provincia_id = P.Provincia_id AND M.Cliente_Provincia = P.Nombre
     
-	WHERE Cliente_Dni IS NOT NULL AND M.Cliente_Dni NOT IN ( SELECT DNI FROM LA_SELECTION.Cliente );
+	WHERE
+    Cliente_Dni IS NOT NULL
+    AND M.Cliente_Dni NOT IN ( SELECT DNI FROM LA_SELECTION.Cliente );
+END
+GO
+
+
+CREATE PROCEDURE LA_SELECTION.migrar_sucursales
+AS
+BEGIN
+	INSERT INTO LA_SELECTION.Sucursal (NroSucursal, Localidad_id, Direccion, Telefono, Mail)
+	SELECT DISTINCT M.Sucursal_NroSucursal, L.Localidad_id, M.Sucursal_Direccion, M.Sucursal_telefono, M.Sucursal_mail
+	FROM gd_esquema.Maestra M
+    
+	INNER JOIN LA_SELECTION.Localidad L
+	ON M.Sucursal_Localidad = L.Nombre
+    
+	INNER JOIN LA_SELECTION.Provincia P
+	ON L.Provincia_id = P.Provincia_id AND M.Sucursal_Provincia = P.Nombre
+    
+	WHERE M.Sucursal_NroSucursal IS NOT NULL AND M.Sucursal_NroSucursal NOT IN ( SELECT NroSucursal FROM LA_SELECTION.Sucursal )
 END
 GO
 
@@ -312,17 +332,19 @@ CREATE PROCEDURE LA_SELECTION.migrar_estadosPedidos
 AS
     BEGIN
         INSERT INTO LA_SELECTION.EstadoPedido (Nombre)
-        SELECT DISTINCT Pedido_Estado AS Nombre
+        SELECT DISTINCT Pedido_Estado
         FROM gd_esquema.Maestra
-  END
+        WHERE Nombre IS NOT NULL AND Pedido_Estado NOT IN ( SELECT Nombre FROM LA_SELECTION.EstadoPedido )
+    END
 GO
 
 CREATE PROCEDURE LA_SELECTION.migrar_tipoMateriales
 AS
     BEGIN
         INSERT INTO LA_SELECTION.TipoMaterial (Nombre)
-        SELECT DISTINCT Material_Tipo AS Nombre
-        FROM gd_esquema.Maestra
+        SELECT DISTINCT Material_Tipo
+        FROM gd_esquema.Maestra M
+		WHERE Material_Tipo IS NOT NULL AND Material_Tipo NOT IN ( SELECT Nombre FROM LA_SELECTION.TipoMaterial)
     END
 GO
 
@@ -413,21 +435,6 @@ AS
                 WHERE Cliente_Localidad IS NOT NULL
             ) intermedia
             JOIN LA_SELECTION.Localidad l ON (intermedia.Cliente_Localidad = l.Nombre)
-    END
-GO
-
-CREATE PROCEDURE LA_SELECTION.migrar_sucursales
-AS
-    BEGIN
-        INSERT INTO LA_SELECTION.Sucursal (NroSucursal, Localidad_id, Direccion, Telefono, Mail)
-        SELECT DISTINCT intermedia.Sucursal_NroSucursal, l.Localidad_id, intermedia.Sucursal_Direccion, intermedia.Sucursal_telefono, intermedia.Sucursal_mail
-        FROM
-            (
-                SELECT DISTINCT Sucursal_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
-                FROM gd_esquema.Maestra
-                WHERE Sucursal_Localidad IS NOT NULL
-            ) intermedia
-            JOIN LA_SELECTION.Localidad l ON (intermedia.Sucursal_Localidad = l.Nombre)
     END
 GO
 
@@ -533,15 +540,27 @@ AS
     END
 GO
 
-/*
-CREATE PROCEDURE LA_SELECTION.migrar_
+CREATE PROCEDURE LA_SELECTION.migrar_envios (Envio_Numero, Fecha_Programada, Fecha, ImporteTraslado, ImporteSubTotal, Total, Factura_id)
 AS
     BEGIN
-        INSERT INTO LA_SELECTION.
-        SELECT
+        INSERT INTO LA_SELECTION.Envio
+        SELECT DISTINCT maestra.Envio_Numero, maestra.Envio_Fecha_Programada, maestra.Envio_Fecha,  maestra.Envio_ImporteTraslado,  maestra.Envio_importeSubida, maestra.Envio_Total, factura.Factura_id
         FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Factura factura ON (maestra.Factura_Numero = factura.Factura_Numero)
     END
 GO
-*/
+
+CREATE PROCEDURE LA_SELECTION.migrar_detalles_compras
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Detalle_Compra (Material_id, Compra_id, Precio, Cantidad, SubTotal)
+        SELECT material.Material_id, compra.Compra_id, maestra.Detalle_Compra_Precio, maestra.Detalle_Compra_Cantidad, maestra.Detalle_Compra_SubTotal
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELCTION.Material material ON (maestra.Material_Nombre = material.Nombre)
+            JOIN LA_SELECTION.Compra compra ON (maestra.Compra_Numero = compra.Compra_Numero)
+    END
+GO
 
 -- Migración de datos
