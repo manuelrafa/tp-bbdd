@@ -308,7 +308,7 @@ END
 GO
 
 
-CREATE PROCEDURE LA_SELECTION.migrar_estadoPedidos
+CREATE PROCEDURE LA_SELECTION.migrar_estadosPedidos
 AS
     BEGIN
         INSERT INTO LA_SELECTION.EstadoPedido (Nombre)
@@ -317,7 +317,7 @@ AS
   END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_tipoMaterial
+CREATE PROCEDURE LA_SELECTION.migrar_tipoMateriales
 AS
     BEGIN
         INSERT INTO LA_SELECTION.TipoMaterial (Nombre)
@@ -326,11 +326,11 @@ AS
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_material
+CREATE PROCEDURE LA_SELECTION.migrar_materiales
 AS
     BEGIN
     INSERT INTO LA_SELECTION.Material (Nombre , Descripcion , Precio, TipoMaterial_id)
-    SELECT M.Material_Nombre , M.Material_Descripcion , M.Material_Precio, T.TipoMaterial_id
+    SELECT DISTINCT M.Material_Nombre , M.Material_Descripcion , M.Material_Precio, T.TipoMaterial_id
         FROM gd_esquema.Maestra
         JOIN LA_SELECTION.TipoMaterial T
             ON M.Material_Tipo = T.Nombre
@@ -380,7 +380,7 @@ AS
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_sillon_modelos
+CREATE PROCEDURE LA_SELECTION.migrar_sillones_modelos
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Sillon_Modelo (Sillon_Modelo_Codigo, Nombre, Descripcion, Precio)
@@ -390,11 +390,11 @@ AS
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_sillon_medidas
+CREATE PROCEDURE LA_SELECTION.migrar_sillones_medidas
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Sillon_Medida (Alto, Ancho, Profundidad, Precio)
-        SELECT Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
+        SELECT DISTINCT Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
         FROM gd_esquema.Maestra
         WHERE Sillon_Medida_Precio IS NOT NULL
         GROUP BY Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
@@ -405,7 +405,7 @@ CREATE PROCEDURE LA_SELECTION.migrar_clientes
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Cliente (DNI, Localidad_id, Nombre, Apellido, Telefono, Direccion, Mail, FechaNacimiento)
-        SELECT intermedia.Cliente_Dni, l.Localidad_id, intermedia.Cliente_Nombre, intermedia.Cliente_Apellido, intermedia.Cliente_Telefono, intermedia.Cliente_Direccion, intermedia.Cliente_Mail, intermedia.Cliente_FechaNacimiento
+        SELECT DISTINCT intermedia.Cliente_Dni, l.Localidad_id, intermedia.Cliente_Nombre, intermedia.Cliente_Apellido, intermedia.Cliente_Telefono, intermedia.Cliente_Direccion, intermedia.Cliente_Mail, intermedia.Cliente_FechaNacimiento
         FROM
             (
                 SELECT DISTINCT Cliente_Localidad, Cliente_Dni, Cliente_Nombre, Cliente_Apellido, Cliente_Telefono, Cliente_Direccion, Cliente_Mail, Cliente_FechaNacimiento
@@ -420,7 +420,7 @@ CREATE PROCEDURE LA_SELECTION.migrar_sucursales
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Sucursal (NroSucursal, Localidad_id, Direccion, Telefono, Mail)
-        SELECT intermedia.Sucursal_NroSucursal, l.Localidad_id, intermedia.Sucursal_Direccion, intermedia.Sucursal_telefono, intermedia.Sucursal_mail
+        SELECT DISTINCT intermedia.Sucursal_NroSucursal, l.Localidad_id, intermedia.Sucursal_Direccion, intermedia.Sucursal_telefono, intermedia.Sucursal_mail
         FROM
             (
                 SELECT DISTINCT Sucursal_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
@@ -435,7 +435,7 @@ CREATE PROCEDURE LA_SELECTION.migrar_proveedores
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Proveedor (CUIT, Localidad_id, Razon_Social, Direccion, Telefono, Mail)
-        SELECT intermedia.Proveedor_Cuit, l.Localidad_id, intermedia.Proveedor_RazonSocial, intermedia.Proveedor_Direccion, intermedia.Proveedor_Telefono, intermedia.Proveedor_Mail
+        SELECT DISTINCT intermedia.Proveedor_Cuit, l.Localidad_id, intermedia.Proveedor_RazonSocial, intermedia.Proveedor_Direccion, intermedia.Proveedor_Telefono, intermedia.Proveedor_Mail
         FROM
             (
                 SELECT DISTINCT Proveedor_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
@@ -450,7 +450,7 @@ CREATE PROCEDURE LA_SELECTION.migrar_sillones
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Sillon (Sillon_Codigo, Sillon_Modelo_id, Sillon_Medida_id, Tela_id, Madera_id, Relleno_id)
-        SELECT maestra.Sillon_Codigo, sillon_modelo.Sillon_Modelo_id, sillon_medida.Sillon_Medida_id, tela.Tela_id, madera.Madera_id, relleno.Relleno_id
+        SELECT DISTINCT maestra.Sillon_Codigo, sillon_modelo.Sillon_Modelo_id, sillon_medida.Sillon_Medida_id, tela.Tela_id, madera.Madera_id, relleno.Relleno_id
         FROM 
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Sillon_Modelo sillon_modelo ON(maestra.Sillon_Modelo_Codigo = sillon_modelo.Sillon_Modelo_Codigo)
@@ -465,12 +465,71 @@ CREATE PROCEDURE LA_SELECTION.migrar_pedidos
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Pedido (Pedido_Numero, Sucursal_id, Cliente_id, Fecha, Total, EstadoPedido_id)
-        SELECT maestra.Pedido_Numero, sucursal.Sucursal_id, cliente.Cliente_id, maestra.Pedido_Fecha, maestra.Pedido_Total, estado_pedido.EstadoPedido_id
+        SELECT DISTINCT maestra.Pedido_Numero, sucursal.Sucursal_id, cliente.Cliente_id, maestra.Pedido_Fecha, maestra.Pedido_Total, estado_pedido.EstadoPedido_id
         FROM 
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
             JOIN LA_SELECTION.Cliente cliente ON (maestra.Cliente_Dni = cliente.DNI)
-            JOIN LA_SELECTION.EstadoPedido esatdo_pedido ON (maestra.Pedido_Estado = esatdo_pedido.Nombre)
+            JOIN LA_SELECTION.EstadoPedido estado_pedido ON (maestra.Pedido_Estado = estado_pedido.Nombre)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_compras
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Compra (Compra_Numero, Compra_Fecha, Sucursal_id, Compra_Total, Proveedor_id)
+        SELECT DISTINCT maestra.Compra_Numero, maestra.Compra_Fecha, Sucursal_id, maestra.Compra_Total, proveedor.Proveedor_id
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
+            JOIN LA_SELECTION.Proveedor proveedor ON (maestra.Proveedor_Cuit = proveedor.CUIT)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_detalles_pedidos
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.DetallePedido (Pedido_id, Cantidad, Precio, SubTotal, Sillon_id)
+        SELECT DISTINCT pedido.Pedido_id, maestra.Detalle_Pedido_Cantidad, maestra.Detalle_Pedido_Precio, maestra.Detalle_Pedido_SubTotal, sillon.Sillon_id
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Pedido pedido ON (maestra.Pedido_Numero = pedido.Pedido_Numero)
+            JOIN LA_SELECTION.Sillon sillon ON (maestra.Sillon_Codigo = sillon.Sillon_Codigo)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_cancelaciones_pedidos
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.CancelacionPedido (Fecha, Motivo, Pedido_id)
+        SELECT DISTINCT maestra.Pedido_Cancelacion_Fecha, maestra.Pedido_Cancelacion_Motivo, Pedido_id
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Pedido pedido ON (maestra.Pedido_Numero = pedido.Pedido_Numero)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_facturas (Factura_Numero, Fecha, Total, Cliente_id, Sucursal_id)
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Factura
+        SELECT maestra.Factura_Numero, maestra.Factura_Fecha, maestra.Factura_Total, cliente.Cliente_id, sucursal.Sucursal_id
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Cliente cliente ON (maestra.Cliente_Dni = cliente.DNI)
+            JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_detalles_facturas (DetallePedido_id, Factura_id, Precio, Cantidad, SubTotal)
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.DetalleFactura
+        SELECT detalle_pedido.DetallePedido_id, factura.Factura_id, maestra.Detalle_Factura_Precio, maestra.Detalle_Factura_Cantidad, maestra.Detalle_Factura_SubTotal
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.DetallePedido detalle_pedido ON () --Me falta hacer esta condicion
+            JOIN LA_SELECTION.Factura factura ON (maestra.Factura_Numero = factura.Factura_Numero)
     END
 GO
 
