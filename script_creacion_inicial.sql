@@ -366,4 +366,64 @@ AS
     END
 GO
 
+CREATE PROCEDURE LA_SELECTION.migrar_rellenos
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Relleno (Densidad, Material_id)
+        SELECT  intermedia.Densidad, material.Material_id
+        FROM
+            (
+                SELECT DISTINCT Relleno_Densidad, Material_Nombre
+                FROM gd_esquema.Maestra
+            ) intermedia
+            JOIN LA_SELECTION.Material material ON (intermedia.Material_Nombre = material.Nombre)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_sillon_modelos
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Sillon_Modelo (Sillon_Modelo_Codigo, Nombre, Descripcion, Precio)
+        SELECT DISTINCT Sillon_Modelo_Codigo, Sillon_Modelo, Sillon_Modelo_Descripcion, Sillon_Modelo_Precio
+        FROM gd_esquema.Maestra
+        WHERE Sillon_Modelo_Codigo IS NOT NULL
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_sillon_medidas
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Sillon_Medida (Alto, Ancho, Profundidad, Precio)
+        SELECT Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
+        FROM gd_esquema.Maestra
+        WHERE Sillon_Medida_Precio IS NOT NULL
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_clientes
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Cliente (DNI, Localidad_id, Nombre, Apellido, Telefono, Direccion, Mail, FechaNacimiento)
+        SELECT intermedia.Cliente_Dni, l.Localidad_id, intermedia.Cliente_Nombre, intermedia.Cliente_Apellido, intermedia.Cliente_Telefono, intermedia.Cliente_Direccion, intermedia.Cliente_Mail, intermedia.Cliente_FechaNacimiento
+        FROM
+            (
+                SELECT DISTINCT Cliente_Localidad, Cliente_Dni, Cliente_Nombre, Cliente_Apellido, Cliente_Telefono, Cliente_Direccion, Cliente_Mail, Cliente_FechaNacimiento
+                FROM gd_esquema.Maestra
+                WHERE Cliente_Localidad IS NOT NULL
+            ) intermedia
+            JOIN LA_SELECTION.Localidad l ON (intermedia.Cliente_Localidad = l.Nombre)
+    END
+GO
+
+/*
+CREATE PROCEDURE LA_SELECTION.migrar_
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.
+        SELECT
+        FROM
+    END
+GO
+*/
+
 -- Migración de datos
