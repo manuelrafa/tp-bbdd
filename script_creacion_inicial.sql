@@ -397,6 +397,7 @@ AS
         SELECT Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
         FROM gd_esquema.Maestra
         WHERE Sillon_Medida_Precio IS NOT NULL
+        GROUP BY Sillon_Medida_Alto, Sillon_Medida_Ancho, Sillon_Medida_Profundidad, Sillon_Medida_Precio
     END
 GO
 
@@ -412,6 +413,64 @@ AS
                 WHERE Cliente_Localidad IS NOT NULL
             ) intermedia
             JOIN LA_SELECTION.Localidad l ON (intermedia.Cliente_Localidad = l.Nombre)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_sucursales
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Sucursal (NroSucursal, Localidad_id, Direccion, Telefono, Mail)
+        SELECT intermedia.Sucursal_NroSucursal, l.Localidad_id, intermedia.Sucursal_Direccion, intermedia.Sucursal_telefono, intermedia.Sucursal_mail
+        FROM
+            (
+                SELECT DISTINCT Sucursal_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
+                FROM gd_esquema.Maestra
+                WHERE Sucursal_Localidad IS NOT NULL
+            ) intermedia
+            JOIN LA_SELECTION.Localidad l ON (intermedia.Sucursal_Localidad = l.Nombre)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_proveedores
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Proveedor (CUIT, Localidad_id, Razon_Social, Direccion, Telefono, Mail)
+        SELECT intermedia.Proveedor_Cuit, l.Localidad_id, intermedia.Proveedor_RazonSocial, intermedia.Proveedor_Direccion, intermedia.Proveedor_Telefono, intermedia.Proveedor_Mail
+        FROM
+            (
+                SELECT DISTINCT Proveedor_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
+                FROM gd_esquema.Maestra
+                WHERE Sucursal_Localidad IS NOT NULL
+            ) intermedia
+            JOIN LA_SELECTION.Localidad l ON (intermedia.Proveedor_Localidad = l.Nombre)
+    END 
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_sillones
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Sillon (Sillon_Codigo, Sillon_Modelo_id, Sillon_Medida_id, Tela_id, Madera_id, Relleno_id)
+        SELECT maestra.Sillon_Codigo, sillon_modelo.Sillon_Modelo_id, sillon_medida.Sillon_Medida_id, tela.Tela_id, madera.Madera_id, relleno.Relleno_id
+        FROM 
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Sillon_Modelo sillon_modelo ON(maestra.Sillon_Modelo_Codigo = sillon_modelo.Sillon_Modelo_Codigo)
+            JOIN LA_SELECTION.Sillon_Medida sillon_medida ON(maestra.Sillon_Medida_Alto = sillon_medida.Sillon_Medida_Alto AND maestra.Sillon_Medida_Ancho = sillon_medida.Sillon_Medida_Ancho AND maestra.Sillon_Medida_Precio = sillon_medida.Sillon_Medida_Precio AND maestra.Sillon_Medida_Profundidad = sillon_medida.Sillon_Medida_Profundidad)
+            JOIN LA_SELECTION.Tela tela ON(maestra.Tela_Color = tela.Color AND maestra.Tela_Textura = tela.Textura)
+            JOIN LA_SELECTION.Madera madera ON (maestra.Madera_Color = madera.Color AND maestra.Madera_Dureza = madera.Dureza)
+            JOIN LA_SELECTION.Relleno relleno ON (maestra.Relleno_Densidad = relleno.Densidad)
+    END
+GO
+
+CREATE PROCEDURE LA_SELECTION.migrar_pedidos
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Pedido (Pedido_Numero, Sucursal_id, Cliente_id, Fecha, Total, EstadoPedido_id)
+        SELECT maestra.Pedido_Numero, sucursal.Sucursal_id, cliente.Cliente_id, maestra.Pedido_Fecha, maestra.Pedido_Total, estado_pedido.EstadoPedido_id
+        FROM 
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
+            JOIN LA_SELECTION.Cliente cliente ON (maestra.Cliente_Dni = cliente.DNI)
+            JOIN LA_SELECTION.EstadoPedido esatdo_pedido ON (maestra.Pedido_Estado = esatdo_pedido.Nombre)
     END
 GO
 
