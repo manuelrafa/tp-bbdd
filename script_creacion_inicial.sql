@@ -334,9 +334,10 @@ AS
         INSERT INTO LA_SELECTION.EstadoPedido (Nombre)
         SELECT DISTINCT Pedido_Estado
         FROM gd_esquema.Maestra
-        WHERE Nombre IS NOT NULL AND Pedido_Estado NOT IN ( SELECT Nombre FROM LA_SELECTION.EstadoPedido )
+        WHERE Pedido_Estado IS NOT NULL AND Pedido_Estado NOT IN ( SELECT Nombre FROM LA_SELECTION.EstadoPedido )
     END
 GO
+
 
 CREATE PROCEDURE LA_SELECTION.migrar_tipoMateriales
 AS
@@ -348,14 +349,15 @@ AS
     END
 GO
 
+
 CREATE PROCEDURE LA_SELECTION.migrar_materiales
 AS
     BEGIN
     INSERT INTO LA_SELECTION.Material (Nombre , Descripcion , Precio, TipoMaterial_id)
     SELECT DISTINCT M.Material_Nombre , M.Material_Descripcion , M.Material_Precio, T.TipoMaterial_id
-        FROM gd_esquema.Maestra
+        FROM gd_esquema.Maestra M
         JOIN LA_SELECTION.TipoMaterial T
-            ON M.Material_Tipo = T.Nombre
+        ON M.Material_Tipo = T.Nombre
         WHERE M.Material_Tipo IS NOT NULL
     END
 GO
@@ -364,13 +366,10 @@ CREATE PROCEDURE LA_SELECTION.migrar_telas
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Tela (Color, Textura, Material_id)
-        SELECT intermedia.Tela_Color, intermedia.Textura, material.Material_id
-        FROM
-            (
-                SELECT DISTINCT Tela_Color, Tela_Textura, Material_Nombre
-                FROM gd_esquema.Maestra
-            ) intermedia
-            JOIN LA_SELECTION.Material material ON (intermedia.Material_Nombre = material.Nombre)
+        SELECT DISTINCT Maestra.Tela_Color, Maestra.Tela_Textura, material.Material_id
+        FROM gd_esquema.Maestra Maestra
+        JOIN LA_SELECTION.Material Material ON (Maestra.Material_Nombre = Material.Nombre)
+		WHERE Maestra.Tela_Color IS NOT NULL AND Material.Material_id NOT IN ( SELECT Material_id FROM LA_SELECTION.Tela )
     END
 GO
 
@@ -378,13 +377,10 @@ CREATE PROCEDURE LA_SELECTION.migrar_maderas
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Madera (Color, Dureza, Material_id)
-        SELECT  intermedia.Madera_Color, intermedia.Madera_Dureza, material.Material_id
-        FROM
-            (
-                SELECT DISTINCT Madera_Color, Madera_Textura, Material_Nombre
-                FROM gd_esquema.Maestra
-            ) intermedia
-            JOIN LA_SELECTION.Material material ON (intermedia.Material_Nombre = material.Nombre)
+        SELECT DISTINCT Maestra.Madera_Color, Maestra.Madera_Dureza, material.Material_id
+        FROM gd_esquema.Maestra Maestra
+        JOIN LA_SELECTION.Material Material ON (Maestra.Material_Nombre = Material.Nombre)
+		WHERE Maestra.Madera_Color IS NOT NULL AND Material.Material_id NOT IN ( SELECT Material_id FROM LA_SELECTION.Madera )
     END
 GO
 
@@ -392,13 +388,10 @@ CREATE PROCEDURE LA_SELECTION.migrar_rellenos
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Relleno (Densidad, Material_id)
-        SELECT  intermedia.Densidad, material.Material_id
-        FROM
-            (
-                SELECT DISTINCT Relleno_Densidad, Material_Nombre
-                FROM gd_esquema.Maestra
-            ) intermedia
-            JOIN LA_SELECTION.Material material ON (intermedia.Material_Nombre = material.Nombre)
+        SELECT DISTINCT Maestra.Relleno_Densidad, material.Material_id
+        FROM gd_esquema.Maestra Maestra
+        JOIN LA_SELECTION.Material Material ON (Maestra.Material_Nombre = Material.Nombre)
+		WHERE Maestra.Relleno_Densidad IS NOT NULL AND Material.Material_id NOT IN ( SELECT Material_id FROM LA_SELECTION.Relleno )
     END
 GO
 
@@ -408,7 +401,7 @@ AS
         INSERT INTO LA_SELECTION.Sillon_Modelo (Sillon_Modelo_Codigo, Nombre, Descripcion, Precio)
         SELECT DISTINCT Sillon_Modelo_Codigo, Sillon_Modelo, Sillon_Modelo_Descripcion, Sillon_Modelo_Precio
         FROM gd_esquema.Maestra
-        WHERE Sillon_Modelo_Codigo IS NOT NULL
+        WHERE Sillon_Modelo_Codigo IS NOT NULL AND Sillon_Modelo_Codigo NOT IN ( SELECT Sillon_Modelo_Codigo FROM LA_SELECTION.Sillon_Modelo )
     END
 GO
 
@@ -423,20 +416,8 @@ AS
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_clientes
-AS
-    BEGIN
-        INSERT INTO LA_SELECTION.Cliente (DNI, Localidad_id, Nombre, Apellido, Telefono, Direccion, Mail, FechaNacimiento)
-        SELECT DISTINCT intermedia.Cliente_Dni, l.Localidad_id, intermedia.Cliente_Nombre, intermedia.Cliente_Apellido, intermedia.Cliente_Telefono, intermedia.Cliente_Direccion, intermedia.Cliente_Mail, intermedia.Cliente_FechaNacimiento
-        FROM
-            (
-                SELECT DISTINCT Cliente_Localidad, Cliente_Dni, Cliente_Nombre, Cliente_Apellido, Cliente_Telefono, Cliente_Direccion, Cliente_Mail, Cliente_FechaNacimiento
-                FROM gd_esquema.Maestra
-                WHERE Cliente_Localidad IS NOT NULL
-            ) intermedia
-            JOIN LA_SELECTION.Localidad l ON (intermedia.Cliente_Localidad = l.Nombre)
-    END
-GO
+-- Hasta acá se revisó --
+
 
 CREATE PROCEDURE LA_SELECTION.migrar_proveedores
 AS
@@ -558,9 +539,75 @@ AS
         SELECT material.Material_id, compra.Compra_id, maestra.Detalle_Compra_Precio, maestra.Detalle_Compra_Cantidad, maestra.Detalle_Compra_SubTotal
         FROM
             gd_esquema.Maestra maestra
-            JOIN LA_SELCTION.Material material ON (maestra.Material_Nombre = material.Nombre)
+            JOIN LA_SELECTION.Material material ON (maestra.Material_Nombre = material.Nombre)
             JOIN LA_SELECTION.Compra compra ON (maestra.Compra_Numero = compra.Compra_Numero)
     END
 GO
 
+
+
+
 -- Migración de datos
+BEGIN TRANSACTION
+ BEGIN TRY
+	EXECUTE LA_SELECTION.migrar_provincias
+    EXECUTE LA_SELECTION.migrar_localidades
+    EXECUTE LA_SELECTION.migrar_clientes
+    EXECUTE LA_SELECTION.migrar_sucursales  
+    EXECUTE LA_SELECTION.migrar_estadosPedidos
+    EXECUTE LA_SELECTION.migrar_tipoMateriales
+    EXECUTE LA_SELECTION.migrar_materiales
+    EXECUTE LA_SELECTION.migrar_telas
+    EXECUTE LA_SELECTION.migrar_maderas
+    EXECUTE LA_SELECTION.migrar_rellenos
+    EXECUTE LA_SELECTION.migrar_sillones_modelos
+    EXECUTE LA_SELECTION.migrar_sillones_medidas
+    EXECUTE LA_SELECTION.migrar_proveedores
+    EXECUTE LA_SELECTION.migrar_sillones
+    EXECUTE LA_SELECTION.migrar_pedidos
+    EXECUTE LA_SELECTION.migrar_compras
+    EXECUTE LA_SELECTION.migrar_detalles_pedidos
+    EXECUTE LA_SELECTION.migrar_cancelaciones_pedidos
+    EXECUTE LA_SELECTION.migrar_facturas
+    EXECUTE LA_SELECTION.migrar_detalles_facturas
+    EXECUTE LA_SELECTION.migrar_envios
+    EXECUTE LA_SELECTION.migrar_detalles_compras
+END TRY
+BEGIN CATCH
+    ROLLBACK TRANSACTION;
+	THROW 50001, 'Error al migrar las tablas, verifique que las nuevas tablas se encuentren vacías o bien ejecute un DROP de todas las nuevas tablas y vuelva a intentarlo.',1;
+END CATCH
+    --ajustar esto a ls correspondientes tablas
+   IF (EXISTS (SELECT 1 FROM LA_SELECTION.Provincia)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Localidad)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Cliente)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Sucursal)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.EstadoPedido)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.TipoMaterial)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Material)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Tela)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Madera)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Relleno)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Sillon_Modelo)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Sillon_Medida)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Proveedor)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Sillon)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Pedido)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Compra)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.DetallePedido)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.CancelacionPedido)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Factura)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.DetalleFactura)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Envio)
+   AND EXISTS (SELECT 1 FROM LA_SELECTION.Detalle_Compra))
+   BEGIN
+	PRINT 'Tablas migradas correctamente.';
+	COMMIT TRANSACTION;
+   END
+	 ELSE
+   BEGIN
+    ROLLBACK TRANSACTION;
+	THROW 50002, 'Hubo un error al migrar una o más tablas. Todos los cambios fueron deshechos, ninguna tabla fue cargada en la base.',1;
+   END
+   
+GO
