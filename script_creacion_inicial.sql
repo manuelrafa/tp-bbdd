@@ -297,11 +297,11 @@ BEGIN
 	M.Cliente_Direccion Direccion, M.Cliente_Mail, Cliente_FechaNacimiento FechaNacimiento
 	FROM gd_esquema.Maestra M
 
-	INNER JOIN LA_SELECTION.Localidad L
-	ON M.Cliente_Localidad = L.Nombre
-
 	INNER JOIN LA_SELECTION.Provincia P
-	ON L.Provincia_id = P.Provincia_id AND M.Cliente_Provincia = P.Nombre
+	ON M.Cliente_Provincia = P.Nombre
+
+	INNER JOIN LA_SELECTION.Localidad L
+	ON L.Provincia_id = P.Provincia_id AND M.Cliente_Localidad = L.Nombre
     
 	WHERE
     Cliente_Dni IS NOT NULL
@@ -316,14 +316,15 @@ BEGIN
 	INSERT INTO LA_SELECTION.Sucursal (NroSucursal, Localidad_id, Direccion, Telefono, Mail)
 	SELECT DISTINCT M.Sucursal_NroSucursal, L.Localidad_id, M.Sucursal_Direccion, M.Sucursal_telefono, M.Sucursal_mail
 	FROM gd_esquema.Maestra M
+
+	JOIN LA_SELECTION.Provincia P
+	ON M.Sucursal_Provincia = P.Nombre
+
+	JOIN LA_SELECTION.Localidad L
+	ON L.Provincia_id = P.Provincia_id AND M.Sucursal_Localidad = L.Nombre
     
-	INNER JOIN LA_SELECTION.Localidad L
-	ON M.Sucursal_Localidad = L.Nombre
     
-	INNER JOIN LA_SELECTION.Provincia P
-	ON L.Provincia_id = P.Provincia_id AND M.Sucursal_Provincia = P.Nombre
-    
-	WHERE M.Sucursal_NroSucursal IS NOT NULL AND M.Sucursal_NroSucursal NOT IN ( SELECT NroSucursal FROM LA_SELECTION.Sucursal )
+	WHERE M.Sucursal_NroSucursal IS NOT NULL AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Sucursal S WHERE S.NroSucursal = M.Sucursal_NroSucursal )
 END
 GO
 
@@ -416,36 +417,51 @@ AS
     END
 GO
 
--- Hasta acá se revisó --
-
-
-CREATE PROCEDURE LA_SELECTION.migrar_proveedores
-AS
-    BEGIN
-        INSERT INTO LA_SELECTION.Proveedor (CUIT, Localidad_id, Razon_Social, Direccion, Telefono, Mail)
-        SELECT DISTINCT intermedia.Proveedor_Cuit, l.Localidad_id, intermedia.Proveedor_RazonSocial, intermedia.Proveedor_Direccion, intermedia.Proveedor_Telefono, intermedia.Proveedor_Mail
-        FROM
-            (
-                SELECT DISTINCT Proveedor_Localidad, Sucursal_NroSucursal, Sucursal_Direccion, Sucursal_telefono, Sucursal_mail
-                FROM gd_esquema.Maestra
-                WHERE Sucursal_Localidad IS NOT NULL
-            ) intermedia
-            JOIN LA_SELECTION.Localidad l ON (intermedia.Proveedor_Localidad = l.Nombre)
-    END 
-GO
 
 CREATE PROCEDURE LA_SELECTION.migrar_sillones
 AS
     BEGIN
         INSERT INTO LA_SELECTION.Sillon (Sillon_Codigo, Sillon_Modelo_id, Sillon_Medida_id, Tela_id, Madera_id, Relleno_id)
-        SELECT DISTINCT maestra.Sillon_Codigo, sillon_modelo.Sillon_Modelo_id, sillon_medida.Sillon_Medida_id, tela.Tela_id, madera.Madera_id, relleno.Relleno_id
-        FROM 
-            gd_esquema.Maestra maestra
-            JOIN LA_SELECTION.Sillon_Modelo sillon_modelo ON(maestra.Sillon_Modelo_Codigo = sillon_modelo.Sillon_Modelo_Codigo)
-            JOIN LA_SELECTION.Sillon_Medida sillon_medida ON(maestra.Sillon_Medida_Alto = sillon_medida.Sillon_Medida_Alto AND maestra.Sillon_Medida_Ancho = sillon_medida.Sillon_Medida_Ancho AND maestra.Sillon_Medida_Precio = sillon_medida.Sillon_Medida_Precio AND maestra.Sillon_Medida_Profundidad = sillon_medida.Sillon_Medida_Profundidad)
-            JOIN LA_SELECTION.Tela tela ON(maestra.Tela_Color = tela.Color AND maestra.Tela_Textura = tela.Textura)
-            JOIN LA_SELECTION.Madera madera ON (maestra.Madera_Color = madera.Color AND maestra.Madera_Dureza = madera.Dureza)
-            JOIN LA_SELECTION.Relleno relleno ON (maestra.Relleno_Densidad = relleno.Densidad)
+        SELECT
+			aux.Sillon_Codigo,
+			sm.Sillon_Modelo_id,
+			medida.Sillon_Medida_id,
+			t.Tela_id,
+			ma.Madera_id,
+			r.Relleno_id
+		FROM
+		(SELECT
+            -- Usamos los MAX para asegurar que devuelve un solo valor para cada columna
+			m.Sillon_Codigo,
+			MAX(m.Sillon_Modelo_Codigo) AS Sillon_Modelo_Codigo,
+			MAX(m.Sillon_Medida_Alto) AS Alto,
+			MAX(m.Sillon_Medida_Ancho) AS Ancho,
+			MAX(m.Sillon_Medida_Profundidad) AS Profundidad,
+			MAX(CASE WHEN m.Material_Tipo = 'Tela' THEN m.Material_Nombre END) AS Tela_Material,
+			MAX(CASE WHEN m.Material_Tipo = 'Madera' THEN m.Material_Nombre END) AS Madera_Material,
+			MAX(CASE WHEN m.Material_Tipo = 'Relleno' THEN m.Material_Nombre END) AS Relleno_Material
+		FROM gd_esquema.Maestra m
+		WHERE m.Sillon_Codigo IS NOT NULL
+		GROUP BY m.Sillon_Codigo) AS aux
+		LEFT JOIN LA_SELECTION.Material mat_t ON mat_t.Nombre = aux.Tela_Material
+		LEFT JOIN LA_SELECTION.Material mat_m ON mat_m.Nombre = aux.Madera_Material
+		LEFT JOIN LA_SELECTION.Material mat_r ON mat_r.Nombre = aux.Relleno_Material
+
+		LEFT JOIN LA_SELECTION.Tela t ON t.Material_id = mat_t.Material_id
+		LEFT JOIN LA_SELECTION.Madera ma ON ma.Material_id = mat_m.Material_id
+		LEFT JOIN LA_SELECTION.Relleno r ON r.Material_id = mat_r.Material_id
+
+		LEFT JOIN LA_SELECTION.Sillon_Modelo sm ON sm.Sillon_Modelo_Codigo = aux.Sillon_Modelo_Codigo
+
+		LEFT JOIN LA_SELECTION.Sillon_Medida medida
+		ON medida.Alto = aux.Alto AND medida.Ancho = aux.Ancho AND medida.Profundidad = aux.Profundidad
+
+		WHERE sm.Sillon_Modelo_id IS NOT NULL
+		AND medida.Sillon_Medida_id IS NOT NULL
+		AND t.Tela_id IS NOT NULL
+		AND ma.Madera_id IS NOT NULL
+		AND r.Relleno_id IS NOT NULL
+		AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Sillon s WHERE s.Sillon_Codigo = aux.Sillon_Codigo )
     END
 GO
 
@@ -459,20 +475,10 @@ AS
             JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
             JOIN LA_SELECTION.Cliente cliente ON (maestra.Cliente_Dni = cliente.DNI)
             JOIN LA_SELECTION.EstadoPedido estado_pedido ON (maestra.Pedido_Estado = estado_pedido.Nombre)
+			WHERE NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Pedido p WHERE p.Pedido_Numero = maestra.Pedido_Numero )
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_compras
-AS
-    BEGIN
-        INSERT INTO LA_SELECTION.Compra (Compra_Numero, Compra_Fecha, Sucursal_id, Compra_Total, Proveedor_id)
-        SELECT DISTINCT maestra.Compra_Numero, maestra.Compra_Fecha, Sucursal_id, maestra.Compra_Total, proveedor.Proveedor_id
-        FROM
-            gd_esquema.Maestra maestra
-            JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
-            JOIN LA_SELECTION.Proveedor proveedor ON (maestra.Proveedor_Cuit = proveedor.CUIT)
-    END
-GO
 
 CREATE PROCEDURE LA_SELECTION.migrar_detalles_pedidos
 AS
@@ -483,8 +489,10 @@ AS
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Pedido pedido ON (maestra.Pedido_Numero = pedido.Pedido_Numero)
             JOIN LA_SELECTION.Sillon sillon ON (maestra.Sillon_Codigo = sillon.Sillon_Codigo)
+			WHERE NOT EXISTS ( SELECT 1 FROM LA_SELECTION.DetallePedido dp WHERE dp.Pedido_id = pedido.Pedido_id AND dp.Sillon_id = sillon.Sillon_id )
     END
 GO
+
 
 CREATE PROCEDURE LA_SELECTION.migrar_cancelaciones_pedidos
 AS
@@ -494,43 +502,85 @@ AS
         FROM
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Pedido pedido ON (maestra.Pedido_Numero = pedido.Pedido_Numero)
+		WHERE Pedido_Cancelacion_Fecha IS NOT NULL AND Pedido_Cancelacion_Motivo IS NOT NULL
+		AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.CancelacionPedido cp WHERE cp.Pedido_id = pedido.Pedido_id )
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_facturas (Factura_Numero, Fecha, Total, Cliente_id, Sucursal_id)
+
+CREATE PROCEDURE LA_SELECTION.migrar_facturas
 AS
     BEGIN
-        INSERT INTO LA_SELECTION.Factura
-        SELECT maestra.Factura_Numero, maestra.Factura_Fecha, maestra.Factura_Total, cliente.Cliente_id, sucursal.Sucursal_id
+        INSERT INTO LA_SELECTION.Factura (Factura_Numero, Fecha, Total, Cliente_id, Sucursal_id)
+        SELECT DISTINCT maestra.Factura_Numero, maestra.Factura_Fecha, maestra.Factura_Total, cliente.Cliente_id, sucursal.Sucursal_id
         FROM
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Cliente cliente ON (maestra.Cliente_Dni = cliente.DNI)
             JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
+			WHERE maestra.Factura_Numero IS NOT NULL
+			AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Factura f  WHERE f.Factura_Numero = maestra.Factura_Numero )
     END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_detalles_facturas (DetallePedido_id, Factura_id, Precio, Cantidad, SubTotal)
+
+CREATE PROCEDURE LA_SELECTION.migrar_detalles_facturas
 AS
-    BEGIN
-        INSERT INTO LA_SELECTION.DetalleFactura
-        SELECT detalle_pedido.DetallePedido_id, factura.Factura_id, maestra.Detalle_Factura_Precio, maestra.Detalle_Factura_Cantidad, maestra.Detalle_Factura_SubTotal
-        FROM
-            gd_esquema.Maestra maestra
-            JOIN LA_SELECTION.DetallePedido detalle_pedido ON () --Me falta hacer esta condicion
-            JOIN LA_SELECTION.Factura factura ON (maestra.Factura_Numero = factura.Factura_Numero)
-    END
+BEGIN
+    INSERT INTO LA_SELECTION.DetalleFactura (DetallePedido_id, Factura_id, Precio, Cantidad, SubTotal)
+	SELECT dp.DetallePedido_id, f.Factura_id, m.Detalle_Factura_Precio, m.Detalle_Factura_Cantidad, m.Detalle_Factura_SubTotal
+	FROM gd_esquema.Maestra m
+	JOIN LA_SELECTION.Factura f ON m.Factura_Numero = f.Factura_Numero
+	JOIN LA_SELECTION.Pedido p ON m.Pedido_Numero = p.Pedido_Numero
+	JOIN LA_SELECTION.DetallePedido dp 
+		ON dp.Pedido_id = p.Pedido_id 
+		AND dp.Precio = m.Detalle_Factura_Precio
+		AND dp.Cantidad = m.Detalle_Factura_Cantidad
+		AND dp.SubTotal = m.Detalle_Factura_SubTotal
+	WHERE m.Detalle_Factura_Precio IS NOT NULL AND m.Detalle_Factura_Cantidad IS NOT NULL AND m.Detalle_Factura_SubTotal IS NOT NULL
+		AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.DetalleFactura dfact WHERE dfact.DetallePedido_id = dp.DetallePedido_id AND dfact.Factura_id = f.Factura_id )
+END
 GO
 
-CREATE PROCEDURE LA_SELECTION.migrar_envios (Envio_Numero, Fecha_Programada, Fecha, ImporteTraslado, ImporteSubTotal, Total, Factura_id)
+CREATE PROCEDURE LA_SELECTION.migrar_envios
 AS
     BEGIN
-        INSERT INTO LA_SELECTION.Envio
+        INSERT INTO LA_SELECTION.Envio (Envio_Numero, Fecha_Programada, Fecha, ImporteTraslado, ImporteSubida, Total, Factura_id)
         SELECT DISTINCT maestra.Envio_Numero, maestra.Envio_Fecha_Programada, maestra.Envio_Fecha,  maestra.Envio_ImporteTraslado,  maestra.Envio_importeSubida, maestra.Envio_Total, factura.Factura_id
         FROM
             gd_esquema.Maestra maestra
             JOIN LA_SELECTION.Factura factura ON (maestra.Factura_Numero = factura.Factura_Numero)
+			WHERE maestra.Envio_Numero IS NOT NULL AND maestra.Envio_Fecha_Programada IS NOT NULL AND maestra.Envio_Total IS NOT NULL
+			AND NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Envio e WHERE e.Envio_Numero = maestra.Envio_Numero AND e.Factura_id = factura.Factura_id )
     END
 GO
+
+
+CREATE PROCEDURE LA_SELECTION.migrar_proveedores
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Proveedor (Cuit, Localidad_id, Razon_Social, Direccion, Telefono, Mail)
+        SELECT DISTINCT m.Proveedor_Cuit, l.Localidad_id, m.Proveedor_RazonSocial, m.Proveedor_Direccion, m.Proveedor_Telefono, m.Proveedor_Mail
+        FROM gd_esquema.Maestra m
+		JOIN LA_SELECTION.Provincia p ON m.Proveedor_Provincia = p.Nombre
+		JOIN LA_SELECTION.Localidad l ON m.Proveedor_Localidad = l.Nombre AND l.Provincia_id = p.Provincia_id
+		WHERE NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Proveedor prov WHERE prov.Cuit = m.Proveedor_Cuit )
+    END 
+GO
+
+
+CREATE PROCEDURE LA_SELECTION.migrar_compras
+AS
+    BEGIN
+        INSERT INTO LA_SELECTION.Compra (Compra_Numero, Compra_Fecha, Sucursal_id, Compra_Total, Proveedor_id)
+        SELECT DISTINCT maestra.Compra_Numero, maestra.Compra_Fecha, sucursal.Sucursal_id, maestra.Compra_Total, proveedor.Proveedor_id
+        FROM
+            gd_esquema.Maestra maestra
+            JOIN LA_SELECTION.Sucursal sucursal ON (maestra.Sucursal_NroSucursal = sucursal.NroSucursal)
+            JOIN LA_SELECTION.Proveedor proveedor ON (maestra.Proveedor_Cuit = proveedor.CUIT)
+			WHERE NOT EXISTS ( SELECT 1 FROM LA_SELECTION.Compra c WHERE c.Compra_Numero = maestra.Compra_Numero AND c.Sucursal_id = sucursal.Sucursal_id )
+    END
+GO
+
 
 CREATE PROCEDURE LA_SELECTION.migrar_detalles_compras
 AS
@@ -539,8 +589,19 @@ AS
         SELECT material.Material_id, compra.Compra_id, maestra.Detalle_Compra_Precio, maestra.Detalle_Compra_Cantidad, maestra.Detalle_Compra_SubTotal
         FROM
             gd_esquema.Maestra maestra
-            JOIN LA_SELECTION.Material material ON (maestra.Material_Nombre = material.Nombre)
-            JOIN LA_SELECTION.Compra compra ON (maestra.Compra_Numero = compra.Compra_Numero)
+			JOIN LA_SELECTION.TipoMaterial tm ON maestra.Material_Tipo = tm.Nombre
+            JOIN LA_SELECTION.Material material ON maestra.Material_Nombre = material.Nombre AND material.TipoMaterial_id = tm.TipoMaterial_id
+            JOIN LA_SELECTION.Compra compra ON maestra.Compra_Numero = compra.Compra_Numero
+		WHERE maestra.Detalle_Compra_Precio IS NOT NULL
+			AND maestra.Detalle_Compra_Cantidad IS NOT NULL
+			AND maestra.Detalle_Compra_SubTotal IS NOT NULL
+			AND NOT EXISTS (
+					SELECT 1 FROM LA_SELECTION.Detalle_Compra dc
+					WHERE dc.Compra_id = compra.Compra_id AND dc.Material_id = material.Material_id
+					AND dc.Precio = maestra.Detalle_Compra_Precio
+					AND dc.Cantidad = maestra.Detalle_Compra_Cantidad
+					AND dc.SubTotal = maestra.Detalle_Compra_SubTotal
+			)
     END
 GO
 
@@ -575,7 +636,7 @@ BEGIN TRANSACTION
 END TRY
 BEGIN CATCH
     ROLLBACK TRANSACTION;
-	THROW 50001, 'Error al migrar las tablas, verifique que las nuevas tablas se encuentren vacías o bien ejecute un DROP de todas las nuevas tablas y vuelva a intentarlo.',1;
+	THROW 50001, 'Hubo un error en la transferencia de datos.',1;
 END CATCH
     --ajustar esto a ls correspondientes tablas
    IF (EXISTS (SELECT 1 FROM LA_SELECTION.Provincia)
@@ -601,13 +662,13 @@ END CATCH
    AND EXISTS (SELECT 1 FROM LA_SELECTION.Envio)
    AND EXISTS (SELECT 1 FROM LA_SELECTION.Detalle_Compra))
    BEGIN
-	PRINT 'Tablas migradas correctamente.';
+	PRINT 'Tablas y datos transferidos correctamente.';
 	COMMIT TRANSACTION;
    END
 	 ELSE
    BEGIN
     ROLLBACK TRANSACTION;
-	THROW 50002, 'Hubo un error al migrar una o más tablas. Todos los cambios fueron deshechos, ninguna tabla fue cargada en la base.',1;
+	THROW 50002, 'Hubo un error al transferir una o más tablas. Todos los cambios fueron revertidos.',1;
    END
    
 GO
