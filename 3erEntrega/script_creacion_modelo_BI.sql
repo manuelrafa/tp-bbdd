@@ -256,7 +256,7 @@ CREATE PROCEDURE LA_SELECTION.migrar_BI_Modelo_Sillon
 AS
 BEGIN
     INSERT INTO LA_SELECTION.BI_DIM_Modelo_Sillon (Codigo, Nombre, Descripcion, Precio)
-    SELECT DISTINCT Codigo, Nombre, Descripcion, Precio
+    SELECT DISTINCT Sillon_Modelo_Codigo, Nombre, Descripcion, Precio
     FROM LA_SELECTION.Sillon_Modelo;
 END
 GO
